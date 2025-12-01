@@ -91,6 +91,13 @@ const chatApi = {
   },
 
   /**
+   * 重命名会话
+   */
+  renameSession: (sessionId: string, newName: string): Promise<boolean> => {
+    return ipcRenderer.invoke('chat:renameSession', sessionId, newName)
+  },
+
+  /**
    * 获取可用年份列表
    */
   getAvailableYears: (sessionId: string): Promise<number[]> => {

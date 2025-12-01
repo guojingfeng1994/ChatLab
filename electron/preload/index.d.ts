@@ -36,6 +36,7 @@ interface ChatApi {
   getSessions: () => Promise<AnalysisSession[]>
   getSession: (sessionId: string) => Promise<AnalysisSession | null>
   deleteSession: (sessionId: string) => Promise<boolean>
+  renameSession: (sessionId: string, newName: string) => Promise<boolean>
   getAvailableYears: (sessionId: string) => Promise<number[]>
   getMemberActivity: (sessionId: string, filter?: TimeFilter) => Promise<MemberActivity[]>
   getMemberNameHistory: (sessionId: string, memberId: number) => Promise<MemberNameHistory[]>

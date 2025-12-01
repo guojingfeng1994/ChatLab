@@ -12,7 +12,7 @@ const activeTab = ref('merge')
   <div class="flex h-full flex-col bg-gray-50 dark:bg-gray-950">
     <!-- Header -->
     <div class="border-b border-gray-200 bg-white px-6 py-4 dark:border-gray-800 dark:bg-gray-900">
-      <h1 class="text-xl font-semibold text-gray-900 dark:text-white">工具广场</h1>
+      <h1 class="text-xl font-semibold text-gray-900 dark:text-white">实用工具</h1>
       <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">提供聊天记录处理的实用工具</p>
     </div>
 

@@ -191,6 +191,26 @@ export const useChatStore = defineStore(
     }
 
     /**
+     * 重命名会话
+     */
+    async function renameSession(id: string, newName: string): Promise<boolean> {
+      try {
+        const success = await window.chatApi.renameSession(id, newName)
+        if (success) {
+          // 更新本地列表中的名称
+          const session = sessions.value.find((s) => s.id === id)
+          if (session) {
+            session.name = newName
+          }
+        }
+        return success
+      } catch (error) {
+        console.error('重命名会话失败:', error)
+        return false
+      }
+    }
+
+    /**
      * 清除选中状态
      */
     function clearSelection() {
@@ -245,6 +265,7 @@ export const useChatStore = defineStore(
       importFileFromPath,
       selectSession,
       deleteSession,
+      renameSession,
       clearSelection,
       toggleSidebar,
       addCustomKeywordTemplate,

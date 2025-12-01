@@ -372,6 +372,30 @@ export function deleteSession(sessionId: string): boolean {
 }
 
 /**
+ * 重命名会话
+ */
+export function renameSession(sessionId: string, newName: string): boolean {
+  const dbPath = getDbPath(sessionId)
+  if (!fs.existsSync(dbPath)) {
+    return false
+  }
+
+  try {
+    const db = new Database(dbPath)
+    db.pragma('journal_mode = WAL')
+
+    const stmt = db.prepare('UPDATE meta SET name = ?')
+    stmt.run(newName)
+
+    db.close()
+    return true
+  } catch (error) {
+    console.error('[Database] Failed to rename session:', error)
+    return false
+  }
+}
+
+/**
  * 获取数据库存储目录
  */
 export function getDbDirectory(): string {

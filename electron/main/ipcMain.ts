@@ -261,6 +261,21 @@ const mainIpcMain = (win: BrowserWindow) => {
   })
 
   /**
+   * 重命名会话
+   */
+  ipcMain.handle('chat:renameSession', async (_, sessionId: string, newName: string) => {
+    try {
+      // 先关闭 Worker 中的数据库连接（确保没有其他进程占用）
+      await worker.closeDatabase(sessionId)
+      // 执行重命名
+      return databaseCore.renameSession(sessionId, newName)
+    } catch (error) {
+      console.error('重命名会话失败：', error)
+      return false
+    }
+  })
+
+  /**
    * 获取可用年份列表
    */
   ipcMain.handle('chat:getAvailableYears', async (_, sessionId: string) => {
