@@ -4,6 +4,9 @@ import { storeToRefs } from 'pinia'
 import { ref, onMounted, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import type { AnalysisSession } from '@/types/chat'
+import pkg from '../../../package.json'
+
+const { version } = pkg
 
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
@@ -23,6 +26,10 @@ const showRenameModal = ref(false)
 const renameTarget = ref<AnalysisSession | null>(null)
 const newName = ref('')
 const renameInputRef = ref<HTMLInputElement | null>(null)
+
+// 删除确认相关状态
+const showDeleteModal = ref(false)
+const deleteTarget = ref<AnalysisSession | null>(null)
 
 // 加载会话列表
 onMounted(() => {
@@ -69,9 +76,25 @@ function closeRenameModal() {
   newName.value = ''
 }
 
-// 删除会话
-async function handleDelete(session: AnalysisSession) {
-  await chatStore.deleteSession(session.id)
+// 打开删除确认弹窗
+function openDeleteModal(session: AnalysisSession) {
+  deleteTarget.value = session
+  showDeleteModal.value = true
+}
+
+// 确认删除会话
+async function confirmDelete() {
+  if (!deleteTarget.value) return
+
+  await chatStore.deleteSession(deleteTarget.value.id)
+  showDeleteModal.value = false
+  deleteTarget.value = null
+}
+
+// 关闭删除确认弹窗
+function closeDeleteModal() {
+  showDeleteModal.value = false
+  deleteTarget.value = null
 }
 
 // 生成右键菜单项
@@ -87,7 +110,7 @@ function getContextMenuItems(session: AnalysisSession) {
         label: '删除',
         icon: 'i-lucide-trash',
         color: 'error' as const,
-        onSelect: () => handleDelete(session),
+        onSelect: () => openDeleteModal(session),
       },
     ],
   ]
@@ -102,7 +125,7 @@ function getContextMenuItems(session: AnalysisSession) {
     <!-- Top Section -->
     <div class="flex flex-col p-4">
       <!-- Header / Toggle -->
-      <div class="mb-6 flex items-center" :class="[isCollapsed ? 'justify-center' : 'justify-between']">
+      <div class="mb-2 flex items-center" :class="[isCollapsed ? 'justify-center' : 'justify-between']">
         <div v-if="!isCollapsed" class="text-lg font-semibold text-gray-900 dark:text-white">ChatLab</div>
         <UTooltip :text="isCollapsed ? '展开侧边栏' : '收起侧边栏'" :popper="{ placement: 'right' }">
           <UButton
@@ -153,58 +176,71 @@ function getContextMenuItems(session: AnalysisSession) {
     </div>
 
     <!-- Session List -->
-    <div class="flex-1 overflow-y-auto px-3">
-      <div v-if="sessions.length === 0 && !isCollapsed" class="py-8 text-center text-sm text-gray-500">暂无记录</div>
+    <div class="flex-1 relative min-h-0">
+      <div class="h-full overflow-y-auto px-3">
+        <div v-if="sessions.length === 0 && !isCollapsed" class="py-8 text-center text-sm text-gray-500">暂无记录</div>
 
-      <div class="space-y-1">
-        <div v-if="!isCollapsed && sessions.length > 0" class="mb-2 px-2">
-          <div class="text-xs font-medium text-gray-500">聊天记录</div>
-          <div class="text-[10px] text-gray-400 font-normal mt-0.5">右键删除或重命名</div>
-        </div>
-
-        <UTooltip
-          v-for="session in sessions"
-          :key="session.id"
-          :text="isCollapsed ? session.name : ''"
-          :popper="{ placement: 'right' }"
-        >
-          <UContextMenu :items="getContextMenuItems(session)">
-            <div
-              class="group relative flex w-full items-center rounded-full p-2 text-left transition-colors"
-              :class="[
-                route.params.id === session.id && !isCollapsed
-                  ? 'bg-primary-100 text-gray-900 dark:bg-primary-900/30 dark:text-primary-100'
-                  : 'text-gray-700 dark:text-gray-200 hover:bg-gray-200/60 dark:hover:bg-gray-800',
-                isCollapsed ? 'justify-center cursor-pointer' : 'cursor-pointer',
-              ]"
-              @click="router.push({ name: 'chat', params: { id: session.id } })"
-            >
-              <!-- Platform Icon / Text Avatar -->
-              <div
-                class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold"
-                :class="[
-                  route.params.id === session.id
-                    ? 'bg-primary-600 text-white dark:bg-primary-500 dark:text-white'
-                    : 'bg-gray-400 text-white dark:bg-gray-600 dark:text-white',
-                  isCollapsed ? '' : 'mr-3',
-                ]"
-              >
-                {{ session.name ? session.name.charAt(0) : '?' }}
-              </div>
-
-              <!-- Session Info -->
-              <div v-if="!isCollapsed" class="min-w-0 flex-1">
-                <p class="truncate text-sm font-medium">
-                  {{ session.name }}
-                </p>
-                <p class="truncate text-xs text-gray-500 dark:text-gray-400">
-                  {{ session.messageCount }} 条消息 · {{ formatTime(session.importedAt) }}
-                </p>
-              </div>
+        <div class="space-y-1">
+          <!-- Session List Header - Sticky -->
+          <UTooltip
+            v-if="!isCollapsed && sessions.length > 0"
+            text="右键可删除或重命名聊天记录"
+            :popper="{ placement: 'right' }"
+          >
+            <div class="sticky top-0 z-10 bg-gray-50 dark:bg-gray-900 mb-4 px-2 flex items-center gap-1">
+              <div class="text-sm font-medium text-gray-500">聊天记录</div>
+              <UIcon name="i-heroicons-question-mark-circle" class="size-3.5 text-gray-400" />
             </div>
-          </UContextMenu>
-        </UTooltip>
+          </UTooltip>
+
+          <UTooltip
+            v-for="session in sessions"
+            :key="session.id"
+            :text="isCollapsed ? session.name : ''"
+            :popper="{ placement: 'right' }"
+          >
+            <UContextMenu :items="getContextMenuItems(session)">
+              <div
+                class="group relative flex w-full items-center rounded-full p-2 text-left transition-colors"
+                :class="[
+                  route.params.id === session.id && !isCollapsed
+                    ? 'bg-primary-100 text-gray-900 dark:bg-primary-900/30 dark:text-primary-100'
+                    : 'text-gray-700 dark:text-gray-200 hover:bg-gray-200/60 dark:hover:bg-gray-800',
+                  isCollapsed ? 'justify-center cursor-pointer' : 'cursor-pointer',
+                ]"
+                @click="router.push({ name: 'group-chat', params: { id: session.id } })"
+              >
+                <!-- Platform Icon / Text Avatar -->
+                <div
+                  class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold"
+                  :class="[
+                    route.params.id === session.id
+                      ? 'bg-primary-600 text-white dark:bg-primary-500 dark:text-white'
+                      : 'bg-gray-400 text-white dark:bg-gray-600 dark:text-white',
+                    isCollapsed ? '' : 'mr-3',
+                  ]"
+                >
+                  {{ session.name ? session.name.charAt(0) : '?' }}
+                </div>
+
+                <!-- Session Info -->
+                <div v-if="!isCollapsed" class="min-w-0 flex-1">
+                  <p class="truncate text-sm font-medium">
+                    {{ session.name }}
+                  </p>
+                  <p class="truncate text-xs text-gray-500 dark:text-gray-400">
+                    {{ session.messageCount }} 条消息 · {{ formatTime(session.importedAt) }}
+                  </p>
+                </div>
+              </div>
+            </UContextMenu>
+          </UTooltip>
+        </div>
       </div>
+      <!-- Fade overlay at bottom -->
+      <div
+        class="absolute bottom-0 left-0 right-0 h-16 pointer-events-none bg-gradient-to-t from-gray-50 dark:from-gray-900 to-transparent"
+      />
     </div>
 
     <!-- Rename Modal -->
@@ -216,19 +252,56 @@ function getContextMenuItems(session: AnalysisSession) {
             ref="renameInputRef"
             v-model="newName"
             placeholder="请输入新名称"
-            class="mb-4"
+            class="mb-4 w-100"
             @keydown.enter="handleRename"
           />
           <div class="flex justify-end gap-2">
-            <UButton size="sm" color="gray" variant="soft" @click="closeRenameModal">取消</UButton>
-            <UButton size="sm" color="primary" :disabled="!newName.trim()" @click="handleRename">确定</UButton>
+            <UButton color="gray" variant="soft" @click="closeRenameModal">取消</UButton>
+            <UButton color="primary" :disabled="!newName.trim()" @click="handleRename">确定</UButton>
+          </div>
+        </div>
+      </template>
+    </UModal>
+
+    <!-- Delete Confirmation Modal -->
+    <UModal v-model:open="showDeleteModal">
+      <template #content>
+        <div class="p-4">
+          <h3 class="mb-3 font-semibold text-gray-900 dark:text-white">确认删除</h3>
+          <p class="mb-4 text-sm text-gray-600 dark:text-gray-400">
+            确定要删除聊天记录
+            <span class="font-medium text-gray-900 dark:text-white">"{{ deleteTarget?.name }}"</span>
+            吗？此操作无法撤销。
+          </p>
+          <div class="flex justify-end gap-2">
+            <UButton color="gray" variant="soft" @click="closeDeleteModal">取消</UButton>
+            <UButton color="error" @click="confirmDelete">删除</UButton>
           </div>
         </div>
       </template>
     </UModal>
 
     <!-- Footer -->
-    <div class="border-t border-gray-200 p-4 dark:border-gray-800">
+    <div class="px-4 py-2 dark:border-gray-800 space-y-2">
+      <!-- 问题反馈 -->
+      <UTooltip :text="isCollapsed ? '问题反馈' : ''" :popper="{ placement: 'right' }">
+        <UButton
+          :block="!isCollapsed"
+          class="transition-all rounded-full hover:bg-gray-200/60 dark:hover:bg-gray-800 h-12 cursor-pointer"
+          :class="[isCollapsed ? 'flex w-12 items-center justify-center px-0' : 'justify-start pl-4']"
+          color="gray"
+          variant="ghost"
+        >
+          <UIcon
+            name="i-heroicons-chat-bubble-left-right"
+            class="h-5 w-5 shrink-0"
+            :class="[isCollapsed ? '' : 'mr-2']"
+          />
+          <span v-if="!isCollapsed" class="truncate">更新和反馈</span>
+        </UButton>
+      </UTooltip>
+
+      <!-- 设置和帮助 -->
       <UTooltip :text="isCollapsed ? '设置和帮助' : ''" :popper="{ placement: 'right' }">
         <UButton
           :block="!isCollapsed"
@@ -241,6 +314,20 @@ function getContextMenuItems(session: AnalysisSession) {
           <span v-if="!isCollapsed" class="truncate">设置和帮助</span>
         </UButton>
       </UTooltip>
+
+      <!-- 版本号 & 社交链接 -->
+      <div v-if="!isCollapsed" class="flex items-center justify-center gap-2 py-1 text-xs text-gray-400">
+        <span>v{{ version }}</span>
+        <span>·</span>
+        <a
+          href="https://github.com/hellodigua/ChatLab"
+          target="_blank"
+          class="hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+        >
+          Github
+        </a>
+      </div>
     </div>
   </div>
 </template>
+```
