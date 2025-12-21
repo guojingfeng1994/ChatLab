@@ -78,6 +78,11 @@ const isCheckingConfig = ref(true)
 const messagesContainer = ref<HTMLElement | null>(null)
 const conversationListRef = ref<InstanceType<typeof ConversationList> | null>(null)
 
+// 智能滚动状态
+const isStickToBottom = ref(true) // 是否粘在底部（自动滚动）
+const showScrollToBottom = ref(false) // 是否显示"返回底部"按钮
+const RESTICK_THRESHOLD = 30 // 距离底部此距离内时重新粘住
+
 // 截屏功能
 const conversationContentRef = ref<HTMLElement | null>(null)
 
@@ -161,19 +166,53 @@ ${configHint}`
 // 发送消息
 async function handleSend(content: string) {
   await sendMessage(content)
-  // 滚动到底部
-  scrollToBottom()
+  // 强制滚动到底部（用户发送消息后应该看到响应）
+  scrollToBottom(true)
   // 刷新对话列表
   conversationListRef.value?.refresh()
 }
 
-// 滚动到底部
-function scrollToBottom() {
+// 滚动到底部（强制滚动，用于发送消息等场景）
+function scrollToBottom(force = false) {
   setTimeout(() => {
     if (messagesContainer.value) {
-      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+      // 如果强制滚动，或者处于粘性模式，才执行滚动
+      if (force || isStickToBottom.value) {
+        messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+        isStickToBottom.value = true
+        showScrollToBottom.value = false
+      }
     }
   }, 100)
+}
+
+// 处理用户滚轮/触控板事件（可靠地检测用户主动滚动）
+function handleWheel(event: WheelEvent) {
+  // deltaY < 0 表示向上滚动
+  if (event.deltaY < 0 && isAIThinking.value) {
+    // 用户在 AI 生成时主动向上滚动，解除粘性
+    isStickToBottom.value = false
+    showScrollToBottom.value = true
+  }
+}
+
+// 检测滚动位置（仅用于检测是否滚动到底部以重新粘住）
+function checkScrollPosition() {
+  if (!messagesContainer.value) return
+
+  const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value
+  const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+
+  // 如果用户手动滚动到接近底部，重新启用粘性
+  if (distanceFromBottom < RESTICK_THRESHOLD) {
+    isStickToBottom.value = true
+    showScrollToBottom.value = false
+  }
+}
+
+// 点击"返回底部"按钮
+function handleScrollToBottom() {
+  scrollToBottom(true)
 }
 
 // 切换数据源面板
@@ -189,7 +228,7 @@ async function handleLoadMore() {
 // 选择对话
 async function handleSelectConversation(convId: string) {
   await loadConversation(convId)
-  scrollToBottom()
+  scrollToBottom(true) // 切换对话时强制滚动到底部
 }
 
 // 创建新对话
@@ -212,11 +251,21 @@ onMounted(async () => {
 
   // 初始化欢迎消息
   startNewConversation(generateWelcomeMessage())
+
+  // 添加事件监听
+  if (messagesContainer.value) {
+    messagesContainer.value.addEventListener('scroll', checkScrollPosition)
+    messagesContainer.value.addEventListener('wheel', handleWheel, { passive: true })
+  }
 })
 
-// 组件卸载时停止生成
+// 组件卸载时清理
 onBeforeUnmount(() => {
   stopGeneration()
+  if (messagesContainer.value) {
+    messagesContainer.value.removeEventListener('scroll', checkScrollPosition)
+    messagesContainer.value.removeEventListener('wheel', handleWheel)
+  }
 })
 
 // 处理停止按钮
@@ -235,6 +284,14 @@ watch(
 // 监听 AI 响应流式更新
 watch(
   () => messages.value[messages.value.length - 1]?.content,
+  () => {
+    scrollToBottom()
+  }
+)
+
+// 监听 AI 响应 contentBlocks 更新（工具调用状态变化）
+watch(
+  () => messages.value[messages.value.length - 1]?.contentBlocks?.length,
   () => {
     scrollToBottom()
   }
@@ -264,7 +321,7 @@ watch(
 
     <!-- 中间：对话区域 -->
     <div class="flex h-full flex-1">
-      <div class="flex min-w-[480px] flex-1 flex-col overflow-hidden">
+      <div class="relative flex min-w-[480px] flex-1 flex-col overflow-hidden">
         <!-- 消息列表 -->
         <div ref="messagesContainer" class="min-h-0 flex-1 overflow-y-auto p-4">
           <div ref="conversationContentRef" class="mx-auto max-w-3xl space-y-4">
@@ -308,8 +365,15 @@ watch(
               </div>
             </template>
 
-            <!-- AI 思考中指示器 -->
-            <div v-if="isAIThinking && !messages[messages.length - 1]?.content" class="flex items-start gap-3">
+            <!-- AI 思考中指示器（仅在没有任何内容块时显示） -->
+            <div
+              v-if="
+                isAIThinking &&
+                !messages[messages.length - 1]?.content &&
+                !(messages[messages.length - 1]?.contentBlocks?.length ?? 0)
+              "
+              class="flex items-start gap-3"
+            >
               <div
                 class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-pink-500 to-pink-600"
               >
@@ -385,6 +449,18 @@ watch(
             </div>
           </div>
         </div>
+
+        <!-- 返回底部浮动按钮（固定在输入框上方） -->
+        <Transition name="fade-up">
+          <button
+            v-if="showScrollToBottom"
+            @click="handleScrollToBottom"
+            class="absolute bottom-20 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-gray-800/90 px-3 py-1.5 text-xs text-white shadow-lg backdrop-blur-sm transition-all hover:bg-gray-700 dark:bg-gray-700/90 dark:hover:bg-gray-600"
+          >
+            <UIcon name="i-heroicons-arrow-down" class="h-3.5 w-3.5" />
+            <span>返回底部</span>
+          </button>
+        </Transition>
 
         <!-- 输入框区域 -->
         <div class="px-4 pb-2">
@@ -497,6 +573,17 @@ watch(
 .slide-up-enter-from,
 .slide-up-leave-to {
   transform: translateY(10px);
+  opacity: 0;
+}
+
+/* Transition styles for fade-up (scroll to bottom button) */
+.fade-up-enter-active,
+.fade-up-leave-active {
+  transition: opacity 0.2s ease-out;
+}
+
+.fade-up-enter-from,
+.fade-up-leave-to {
   opacity: 0;
 }
 </style>

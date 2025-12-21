@@ -253,6 +253,19 @@ function formatToolParams(tool: ToolBlockContent): string {
               </div>
             </div>
           </template>
+
+          <!-- 流式处理中指示器（当最后一个块是已完成的工具块时显示） -->
+          <div
+            v-if="isStreaming && contentBlocks && contentBlocks.length > 0 && contentBlocks[contentBlocks.length - 1].type === 'tool'"
+            class="flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 text-sm text-gray-600 dark:bg-gray-800 dark:text-gray-400"
+          >
+            <span class="flex gap-1">
+              <span class="h-1.5 w-1.5 animate-bounce rounded-full bg-pink-500 [animation-delay:0ms]" />
+              <span class="h-1.5 w-1.5 animate-bounce rounded-full bg-pink-500 [animation-delay:150ms]" />
+              <span class="h-1.5 w-1.5 animate-bounce rounded-full bg-pink-500 [animation-delay:300ms]" />
+            </span>
+            <span>正在生成回复...</span>
+          </div>
         </div>
       </template>
 
